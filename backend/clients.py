@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from supabase import create_client
-from google import genai
+import httpx
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
@@ -13,11 +13,10 @@ supabase = create_client(
     os.environ["SUPABASE_SERVICE_KEY"],
 )
 
-# ── Gemini (new SDK) ──────────────────────────────────────────────────────
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 LLM_MODEL = "gemini-3.1-flash-lite-preview"
 EMBED_MODEL = "gemini-embedding-001"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # ── Embeddings ────────────────────────────────────────────────────────────
 
@@ -25,13 +24,21 @@ def embed(text: str, task: str = "RETRIEVAL_DOCUMENT") -> list[float]:
     """
     Embed a single text.
     """
-    response = client.models.embed_content(
-        model=EMBED_MODEL,
-        contents=text,
-        config={"task_type": task},
-    )
-
-    return response.embeddings[0].values
+    url = f"{GEMINI_API_URL}/{EMBED_MODEL}:embedContent"
+    headers = {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": EMBED_MODEL,
+        "content": {"parts": [{"text": text}]},
+        "taskType": task
+    }
+    resp = httpx.post(url, headers=headers, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    # Gemini returns embeddings in 'embedding' field
+    return data["embedding"]["values"]
 
 
 def embed_batch(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
@@ -41,18 +48,23 @@ def embed_batch(texts: list[str], task: str = "RETRIEVAL_DOCUMENT") -> list[list
     """
     BATCH_SIZE = 100
     vectors = []
-
+    url = f"{GEMINI_API_URL}/{EMBED_MODEL}:embedContent"
+    headers = {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json"
+    }
     for i in range(0, len(texts), BATCH_SIZE):
         batch = texts[i:i + BATCH_SIZE]
-
-        response = client.models.embed_content(
-            model=EMBED_MODEL,
-            contents=batch,
-            config={"task_type": task},
-        )
-
-        vectors.extend([e.values for e in response.embeddings])
-
+        payload = {
+            "model": EMBED_MODEL,
+            "content": {"parts": [{"text": t} for t in batch]},
+            "taskType": task
+        }
+        resp = httpx.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        # Gemini returns embeddings in 'embedding' field
+        vectors.extend([data["embedding"]["values"]])
     return vectors
 
 
@@ -62,12 +74,26 @@ def generate(prompt: str) -> str:
     """
     Generate text using Gemini Flash.
     """
-    response = client.models.generate_content(
-        model=LLM_MODEL,
-        contents=prompt,
-    )
-
-    return response.text
+    url = f"{GEMINI_API_URL}/{LLM_MODEL}:generateContent"
+    headers = {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ]
+    }
+    resp = httpx.post(url, headers=headers, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    # Get the first candidate's text
+    candidates = data.get("candidates", [])
+    if candidates and "content" in candidates[0]:
+        parts = candidates[0]["content"].get("parts", [])
+        if parts and "text" in parts[0]:
+            return parts[0]["text"]
+    return ""
 
 
 # ── Qdrant ─────────────────────────────────────────────────────────────────
