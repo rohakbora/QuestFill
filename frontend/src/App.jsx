@@ -429,6 +429,8 @@ const LoginPage = ({ onLogin }) => {
                 : mode==="login" ? "Sign In →" : "Create Account →"
               }
             </button>
+            <font color="red" size="2">*Minimum 6 character password is required.</font>
+            
           </div>
 
           <p style={{
