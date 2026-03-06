@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API = "http://localhost:8000";
+const API = "https://questfill-production.up.railway.app";
 const api = axios.create({ baseURL: API });
 
 api.interceptors.request.use((cfg) => {
