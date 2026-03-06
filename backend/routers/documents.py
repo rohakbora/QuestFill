@@ -68,13 +68,12 @@ def upload_document(file: UploadFile = File(...), user_id: str = Depends(get_cur
         raise HTTPException(422, "Could not extract text from this file.")
 
     # ── Chunk-level dedup ───────────────────────────────────────────────
-    unique_texts = list({c["text"] for c in chunks})
-    vectors      = embed_batch(unique_texts)
-    vector_map   = dict(zip(unique_texts, vectors))
+    # REPLACE with:
+    texts   = [c["text"] for c in chunks]
+    vectors = embed_batch(texts)
 
     points = []
-    for c in chunks:
-        vec = vector_map[c["text"]]
+    for c, vec in zip(chunks, vectors):
         h = hashlib.sha256(f"{user_id}:{c['text']}".encode()).hexdigest()
 
         points.append(

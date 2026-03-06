@@ -2,16 +2,17 @@ import io, re
 import pandas as pd
 import pdfplumber
 
-
 def pdf_pages(data: bytes) -> list[dict]:
-    """For reference documents — extract_words preserves spacing."""
     pages = []
     with pdfplumber.open(io.BytesIO(data)) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
             words = page.extract_words(x_tolerance=3, y_tolerance=3, keep_blank_chars=False)
             if words:
                 text = " ".join(w["text"] for w in words)
-                pages.append({"page": i, "text": text.strip()})
+                text = re.sub(r"\(cid:\d+\)", " ", text)
+                text = re.sub(r"\s+", " ", text).strip()
+                if text:
+                    pages.append({"page": i, "text": text})
     return pages
 
 
